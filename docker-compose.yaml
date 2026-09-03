@@ -31,7 +31,8 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider packages you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  image: apache/airflow:2.11.0
+  build: .
+  image: iot_airflow:1.0.0
   # build: .
   environment:
     &airflow-common-env
@@ -59,6 +60,8 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
+    - ${AIRFLOW_PROJ_DIR:-.}/src:/opt/airflow/src
+    - ${AIRFLOW_PROJ_DIR:-.}/.env:/opt/airflow/.env
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -242,122 +245,179 @@ services:
       - -c
       - airflow
   
-  inventory_oltp:
-    container_name: inventory
-    image: postgres:18-alpine
-    environment:
-      POSTGRES_USER: ${OLTP_USER}
-      POSTGRES_PASSWORD: ${OLTP_PASSWORD}
-      POSTGRES_DB: ${INVENTORY_DB}
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${OLTP_USER}", "-d", "${INVENTORY_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "5432:5432"
-    volumes:
-      - ./oltp_init/inventory_init.sql:/docker-entrypoint-initdb.d/01_init.sql  # initialization for creating tables
-      - inventory_data:/var/lib/postgresql
-    restart: always
+  # inventory_oltp:
+  #   container_name: inventory
+  #   image: postgres:18-alpine
+  #   environment:
+  #     POSTGRES_USER: ${OLTP_USER}
+  #     POSTGRES_PASSWORD: ${OLTP_PASSWORD}
+  #     POSTGRES_DB: ${INVENTORY_DB}
+  #   healthcheck:
+  #     test: ["CMD", "pg_isready", "-U", "${OLTP_USER}", "-d", "${INVENTORY_DB}"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - ./oltp_init/inventory_init.sql:/docker-entrypoint-initdb.d/01_init.sql  # initialization for creating tables
+  #     - inventory_data:/var/lib/postgresql
+  #   restart: always
 
-  sales_oltp:
-    container_name: sales
-    image: postgres:18-alpine
-    environment:
-      POSTGRES_USER: ${OLTP_USER}
-      POSTGRES_PASSWORD: ${OLTP_PASSWORD}
-      POSTGRES_DB: ${SALES_DB}
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${OLTP_USER}", "-d", "${SALES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "5433:5432"  # change external port to launch both OLTP bases
-    volumes:
-      - ./oltp_init/sales_init.sql:/docker-entrypoint-initdb.d/02_init.sql  # initialization for creating tables
-      - sales_data:/var/lib/postgresql
-    restart: always
+  # sales_oltp:
+  #   container_name: sales
+  #   image: postgres:18-alpine
+  #   environment:
+  #     POSTGRES_USER: ${OLTP_USER}
+  #     POSTGRES_PASSWORD: ${OLTP_PASSWORD}
+  #     POSTGRES_DB: ${SALES_DB}
+  #   healthcheck:
+  #     test: ["CMD", "pg_isready", "-U", "${OLTP_USER}", "-d", "${SALES_DB}"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+  #   ports:
+  #     - "5433:5432"  # change external port to launch both OLTP bases
+  #   volumes:
+  #     - ./oltp_init/sales_init.sql:/docker-entrypoint-initdb.d/02_init.sql  # initialization for creating tables
+  #     - sales_data:/var/lib/postgresql
+  #   restart: always
   
-  clickhouse:
-    image: clickhouse/clickhouse-server:23
-    container_name: clickhouse
-    ports:
-      - "8123:8123"  # HTTP interface
-      - "9000:9000"  # Native client / TCP interface
-    volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - clickhouse_logs:/var/log/clickhouse-server
-      - ./olap_init/clickhouse_dwh_init.sql:/docker-entrypoint-initdb.d/03_init.sql
-    environment:
-      CLICKHOUSE_USER: ${OLAP_USER}
-      CLICKHOUSE_PASSWORD: ${OLAP_PASSWORD}
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    restart: always
+  # clickhouse:
+  #   image: clickhouse/clickhouse-server:23
+  #   container_name: clickhouse
+  #   ports:
+  #     - "8123:8123"  # HTTP interface
+  #     - "9000:9000"  # Native client / TCP interface
+  #   volumes:
+  #     - clickhouse_data:/var/lib/clickhouse
+  #     - clickhouse_logs:/var/log/clickhouse-server
+  #     - ./olap_init/clickhouse_dwh_init.sql:/docker-entrypoint-initdb.d/03_init.sql
+  #   environment:
+  #     CLICKHOUSE_USER: ${OLAP_USER}
+  #     CLICKHOUSE_PASSWORD: ${OLAP_PASSWORD}
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+  #   restart: always
 
-  minio:
-    container_name: s3
-    image: minio/minio:RELEASE.2025-02-18T16-25-55Z
-    ports:
-      - "9001:9000"  # S3 API
-      - "9002:9002"  # Web Console
+  # minio:
+  #   container_name: s3
+  #   image: minio/minio:RELEASE.2025-02-18T16-25-55Z
+  #   ports:
+  #     - "9001:9000"  # S3 API
+  #     - "9002:9002"  # Web Console
+  #   environment:
+  #     MINIO_ROOT_USER: ${S3_USER}
+  #     MINIO_ROOT_PASSWORD: ${S3_PASSWORD}
+  #   volumes:
+  #     - minio_data:/data
+  #   command: server /data --console-address ":9002"
+  #   restart: always
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9002/minio/health/live"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # Kafka-кластер из трёх брокеров
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.11
+    hostname: zookeeper
+    container_name: zookeeper
     environment:
-      MINIO_ROOT_USER: ${S3_USER}
-      MINIO_ROOT_PASSWORD: ${S3_PASSWORD}
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9002"
-    restart: always
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9002/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-  
-  zookeeper:  # service to coordinate and store kafka metadata  
-    image: confluentinc/cp-zookeeper:7.7.11 
-    hostname: zookeeper  
-    container_name: zookeeper  
-    environment:  
-      ZOOKEEPER_CLIENT_PORT: 2181  
-      ZOOKEEPER_TICK_TIME: 2000  
-    ports:  
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
       - "2181:2181"
-  
-  kafka:  
-    image: confluentinc/cp-kafka:7.7.11  
-    hostname: kafka  
-    container_name: kafka  
-    depends_on:  
-      - zookeeper  
-    environment:  
-      KAFKA_BROKER_ID: 1  
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181  
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092  
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:19092  
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT  
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT  
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1  
-    ports:  
-      - '9092:9092'  
-      - '19092:19092'  
-  
-  kafka-ui:  
-    image: provectuslabs/kafka-ui:v0.7.2  
-    container_name: kafka-ui  
-    ports:  
+
+  kafka1:
+    image: confluentinc/cp-kafka:7.7.11
+    hostname: kafka1
+    container_name: kafka1
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka1:9092,PLAINTEXT_HOST://localhost:19092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:19092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3  # технический топик consumer_offsets с репликами
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3  # репликация для надёжности
+      KAFKA_MIN_INSYNC_REPLICAS: 2  # n - 1 от общего кол-ва реплик, для синхронизации с лидер репликой
+      KAFKA_LOG_RETENTION_HOURS: 1  # хранение в топиках / партициях
+      KAFKA_LOG_RETENTION_BYTES: -1
+      KAFKA_LOG_SEGMENT_BYTES: 536870912  # 512 мб для максимального размера сегмента
+      KAFKA_LOG_CLEANUP_POLICY: delete
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+
+  kafka2:
+    image: confluentinc/cp-kafka:7.7.11
+    hostname: kafka2
+    container_name: kafka2
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 2
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka2:9092,PLAINTEXT_HOST://localhost:19093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:19092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3  # технический топик consumer_offsets с репликами
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3  # репликация для надёжности
+      KAFKA_MIN_INSYNC_REPLICAS: 2  # n - 1 от общего кол-ва реплик, для синхронизации с лидер репликой
+      KAFKA_LOG_RETENTION_HOURS: 1  # хранение в топиках / партициях
+      KAFKA_LOG_RETENTION_BYTES: -1
+      KAFKA_LOG_SEGMENT_BYTES: 536870912  # 512 мб для максимального размера сегмента
+      KAFKA_LOG_CLEANUP_POLICY: delete      
+    ports:
+      - "9093:9092"
+      - "19093:19092"
+
+  kafka3:
+    image: confluentinc/cp-kafka:7.7.11
+    hostname: kafka3
+    container_name: kafka3
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 3
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka3:9092,PLAINTEXT_HOST://localhost:19094
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:19092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3  # технический топик consumer_offsets с репликами
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3  # репликация для надёжности
+      KAFKA_MIN_INSYNC_REPLICAS: 2  # n - 1 от общего кол-ва реплик, для синхронизации с лидер репликой
+      KAFKA_LOG_RETENTION_HOURS: 1  # хранение в топиках / партициях
+      KAFKA_LOG_RETENTION_BYTES: -1
+      KAFKA_LOG_SEGMENT_BYTES: 536870912  # 512 мб для максимального размера сегмента
+      KAFKA_LOG_CLEANUP_POLICY: delete
+    ports:
+      - "9094:9092"
+      - "19094:19092"
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    ports:
       - "7777:8080"
-    environment:  
+    environment:
       KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092  
-      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181  
-    depends_on:  
-      - kafka  
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka1:9092,kafka2:9092,kafka3:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
 
 volumes:
   airflow_metastore:
