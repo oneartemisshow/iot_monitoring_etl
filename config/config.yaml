@@ -1,0 +1,8 @@
+kafka:
+  bootstrap_server: ${oc.env:KAFKA_BOOTSTRAP}
+  topic: ${oc.env:KAFKA_TOPIC}
+
+hydra:
+  run:
+    # Custom directory pattern for single runs
+    dir: ./config/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
